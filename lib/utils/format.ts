@@ -91,3 +91,10 @@ export function initials(name: string) {
     .map((part) => part[0]?.toUpperCase())
     .join("")
 }
+
+/** Adds calendar days to a YYYY-MM-DD date. */
+export function addDaysIso(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}

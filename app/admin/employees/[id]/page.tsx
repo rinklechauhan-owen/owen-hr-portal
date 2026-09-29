@@ -5,6 +5,7 @@ import { z } from "zod"
 
 import { ActivityList, type ActivityEntry } from "@/components/admin/activity-list"
 import { EmployeeActions } from "@/components/admin/employee-actions"
+import { EmployeeLeaveTab } from "@/components/admin/employee-leave-tab"
 import { DetailList } from "@/components/shared/detail-list"
 import { EmptyState } from "@/components/shared/empty-state"
 import { LinkTabs } from "@/components/shared/link-tabs"
@@ -12,14 +13,16 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Pagination, pageRange } from "@/components/shared/pagination"
 import { EmployeeStatusBadge, StatusBadge } from "@/components/shared/status-badge"
 import { requireSession } from "@/lib/permissions"
+import { getSettings } from "@/lib/queries/reference"
 import { createClient } from "@/lib/supabase/server"
-import { formatDate } from "@/lib/utils/format"
+import { formatDate, todayIn } from "@/lib/utils/format"
 import { flattenParams } from "@/lib/utils/params"
 
 export const metadata: Metadata = { title: "Employee" }
 
 const TABS = [
   { value: "overview", label: "Overview" },
+  { value: "leave", label: "Leave" },
   { value: "activity", label: "Activity" },
 ] as const
 type Tab = (typeof TABS)[number]["value"]
@@ -32,6 +35,9 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
   const page = Math.max(1, Number(query.page) || 1)
 
   const session = await requireSession()
+  const settings = await getSettings()
+  const currentYear = Number(todayIn(settings.timezone).slice(0, 4))
+  const year = Number(query.year) >= 2000 && Number(query.year) <= 2100 ? Number(query.year) : currentYear
   const supabase = await createClient()
   const { data: employee, error } = await supabase
     .from("employees")
@@ -101,6 +107,18 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
             ]}
           />
         </section>
+      )}
+
+      {tab === "leave" && (
+        <EmployeeLeaveTab
+          employeeId={id}
+          employeeName={name}
+          isSelf={employee.profile_id === session.userId}
+          year={year}
+          currentYear={currentYear}
+          page={page}
+          basePath={base}
+        />
       )}
 
       {tab === "activity" && <EmployeeActivity employeeId={id} page={page} basePath={base} />}
