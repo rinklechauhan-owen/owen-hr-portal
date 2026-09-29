@@ -104,7 +104,9 @@ node --env-file=.env.local scripts/create-admin.mjs --email hr@owen-media.com --
 
 Add `--employee-code OM-001 --first-name … --last-name … --joining-date YYYY-MM-DD`
 if the admin is also an employee. They receive an invite email and set their own
-password. Everyone else is added from **Admin → Employees**.
+password. If email cannot be sent yet (Supabase's built-in email allows only a few
+messages per hour), add `--print-link` to print a one-time "set your password" link
+instead of emailing it. The script is safe to re-run for the same email. Everyone else is added from **Admin → Employees**.
 
 Then, in the Admin Portal:
 

@@ -10,6 +10,10 @@
 //   ... --employee-code OM-001 --first-name Priya --last-name Sharma --joining-date 2024-04-01
 //
 // The person receives an invite email and chooses their own password.
+//
+// If email can't be sent (for example Supabase's built-in email rate limit), add
+// --print-link: no email is sent and a one-time "set your password" link is printed
+// instead. Open it yourself or pass it to the person privately; it signs them in.
 
 import { parseArgs } from "node:util"
 
@@ -23,6 +27,7 @@ const { values } = parseArgs({
     "first-name": { type: "string" },
     "last-name": { type: "string" },
     "joining-date": { type: "string" },
+    "print-link": { type: "boolean", default: false },
   },
 })
 
@@ -53,16 +58,51 @@ const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false
 const { data: existing, error: lookupError } = await supabase.from("profiles").select("id").eq("email", email).maybeSingle()
 if (lookupError) fail(`Could not check for an existing login: ${lookupError.message}`)
 
+const printLink = values["print-link"]
+const redirectTo = `${siteUrl}/auth/confirm?next=/reset-password`
 let userId = existing?.id
 let invitedNow = false
+let setPasswordLink = null
+
 if (!userId) {
-  const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
-    data: { full_name: name },
+  if (printLink) {
+    const { data, error } = await supabase.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { data: { full_name: name }, redirectTo },
+    })
+    if (error) fail(error.message)
+    userId = data.user.id
+    setPasswordLink = linkFor(data.properties)
+  } else {
+    const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { full_name: name },
+    })
+    if (inviteError) {
+      fail(
+        inviteError.code === "over_email_send_rate_limit"
+          ? "Supabase's email limit was reached. Re-run with --print-link to get the link without sending an email."
+          : inviteError.message
+      )
+    }
+    userId = invited.user.id
+    invitedNow = true
+  }
+} else if (printLink) {
+  const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } })
+  if (error) fail(error.message)
+  setPasswordLink = linkFor(data.properties)
+}
+
+/** The app's own confirm route, which verifies the token on the server. */
+function linkFor(properties) {
+  const params = new URLSearchParams({
+    token_hash: properties.hashed_token,
+    type: properties.verification_type,
+    next: "/reset-password",
   })
-  if (inviteError) fail(inviteError.message)
-  userId = invited.user.id
-  invitedNow = true
+  return `${siteUrl}/auth/confirm?${params}`
 }
 
 const { error: roleError } = await supabase.from("profiles").update({ role: "admin", full_name: name }).eq("id", userId)
@@ -93,6 +133,13 @@ if (wantsEmployee) {
     })
     if (linkError) fail(`Employee created, but linking the login failed: ${linkError.message}`)
   }
+}
+
+if (setPasswordLink) {
+  console.log(`Done. ${email} is an admin${wantsEmployee ? " and an employee" : ""}. No email was sent.`)
+  console.log("One-time link to set the password (open it on the machine running the app; do not share it):")
+  console.log(setPasswordLink)
+  process.exit(0)
 }
 
 console.log(
