@@ -14,7 +14,7 @@ export type DocumentKind = keyof typeof DOCUMENT_KINDS
 export const documentKindSchema = z.enum(["payslips", "ytd", "pf-ytd"])
 
 export function isDocumentKind(value: string): value is DocumentKind {
-  return value in DOCUMENT_KINDS
+  return Object.hasOwn(DOCUMENT_KINDS, value)
 }
 
 export const uploadDetailsSchema = z

@@ -50,7 +50,16 @@ describe("post-login destination", () => {
     expect(homeFor("employee", true, "/employee/salary?year=2026")).toBe("/employee/salary?year=2026")
   })
 
-  test.each(["https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)"])(
+  test.each([
+    "https://evil.example",
+    "//evil.example",
+    "/\\evil.example",
+    "javascript:alert(1)",
+    // Paths that only become protocol-relative after normalisation.
+    "/.//evil.example",
+    "/%2e//evil.example",
+    "/a/..//evil.example",
+  ])(
     "rejects off-site redirect %s",
     (next) => {
       expect(safeNextPath(next)).toBeNull()

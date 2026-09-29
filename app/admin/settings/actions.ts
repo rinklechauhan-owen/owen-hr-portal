@@ -150,6 +150,16 @@ export async function inviteAdmin(input: z.input<typeof inviteAdminSchema>): Pro
     const parsed = inviteAdminSchema.safeParse(input)
     if (!parsed.success) return invalid(parsed.error)
 
+    // Employees become admins through "Make an employee admin", never by invite:
+    // inviting an existing pending login would otherwise promote it silently.
+    const supabase = await createClient()
+    const [{ data: employee }, { data: profile }] = await Promise.all([
+      supabase.from("employees").select("id").eq("email", parsed.data.email).maybeSingle(),
+      supabase.from("profiles").select("id").eq("email", parsed.data.email).maybeSingle(),
+    ])
+    if (employee) return { ok: false, error: "This email belongs to an employee. Use “Make an employee admin” instead." }
+    if (profile) return { ok: false, error: "This person already has a login. Give them admin access from the list below." }
+
     const admin = createAdminClient()
     const { data, error } = await admin.auth.admin.inviteUserByEmail(parsed.data.email, {
       redirectTo: `${publicEnv().NEXT_PUBLIC_SITE_URL}/auth/confirm?next=/reset-password`,
@@ -162,7 +172,8 @@ export async function inviteAdmin(input: z.input<typeof inviteAdminSchema>): Pro
       return fail(error, "invite admin")
     }
 
-    const { error: roleError } = await admin.from("profiles").update({ role: "admin" }).eq("id", data.user.id)
+    // Set the role with the inviting admin's own session, so RLS and the role guard apply.
+    const { error: roleError } = await supabase.from("profiles").update({ role: "admin" }).eq("id", data.user.id)
     if (roleError) return fail(roleError, "set admin role")
 
     await admin.rpc("service_log_event", {

@@ -38,7 +38,7 @@ export async function createEmployee(input: EmployeeInput): Promise<ActionResult
 
 export async function updateEmployee(id: string, input: EmployeeInput): Promise<ActionResult> {
   try {
-    await authorizeAdmin()
+    const session = await authorizeAdmin()
     if (!idSchema.safeParse(id).success) return { ok: false, error: "Employee not found." }
     const parsed = employeeSchema.safeParse(input)
     if (!parsed.success) return invalid(parsed.error)
@@ -46,7 +46,7 @@ export async function updateEmployee(id: string, input: EmployeeInput): Promise<
     const supabase = await createClient()
     const { data: current, error: loadError } = await supabase
       .from("employees")
-      .select("email, profile_id")
+      .select("email, profile_id, profile:profiles(role)")
       .eq("id", id)
       .maybeSingle()
     if (loadError) return fail(loadError, "load employee")
@@ -54,6 +54,11 @@ export async function updateEmployee(id: string, input: EmployeeInput): Promise<
 
     // Keep the login email in step with the HR record.
     if (current.profile_id && current.email !== parsed.data.email) {
+      // Changing another admin's login email, then sending a reset, would let one
+      // admin take over another's account.
+      if (current.profile?.role === "admin" && current.profile_id !== session.userId) {
+        return { ok: false, error: "Only that administrator can change their own login email." }
+      }
       const { error: authError } = await createAdminClient().auth.admin.updateUserById(current.profile_id, {
         email: parsed.data.email,
         email_confirm: true,
@@ -147,9 +152,10 @@ export async function grantPortalAccess(id: string): Promise<ActionResult> {
       profileId = invited.user.id
     } else if (inviteError?.code === "email_exists") {
       // A login with this email already exists (for example an admin-only account).
-      const { data: existing } = await admin.from("profiles").select("id").eq("email", employee.email).maybeSingle()
+      // Admins can read profiles and employees under RLS, so no service role here.
+      const { data: existing } = await supabase.from("profiles").select("id").eq("email", employee.email).maybeSingle()
       const { data: linked } = existing
-        ? await admin.from("employees").select("id").eq("profile_id", existing.id).maybeSingle()
+        ? await supabase.from("employees").select("id").eq("profile_id", existing.id).maybeSingle()
         : { data: null }
       if (!existing || linked) return { ok: false, error: "Another employee already uses this login email." }
       profileId = existing.id

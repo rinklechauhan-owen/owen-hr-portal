@@ -33,5 +33,8 @@ describe("payroll storage paths", () => {
     expect(isPathForDetails(`${employee}/payslips/../../${other}/x.pdf`, details)).toBe(false)
     expect(isPathForDetails(`${employee}/payslips/nested/x.pdf`, details)).toBe(false)
     expect(isPathForDetails(`${employee}/payslips/x.exe`, details)).toBe(false)
+    // Right folder but a different period, or not a server-issued name.
+    expect(isPathForDetails(storagePathFor({ ...details, month: 8 }), details)).toBe(false)
+    expect(isPathForDetails(`${employee}/payslips/2026-09-existing.pdf`, details)).toBe(false)
   })
 })

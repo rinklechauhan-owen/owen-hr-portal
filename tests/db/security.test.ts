@@ -193,6 +193,17 @@ describe("Employees cannot perform admin actions", () => {
   })
 })
 
+describe("Sign-in audit entries", () => {
+  test("are limited to one a minute per user", async () => {
+    for (let i = 0; i < 5; i++) await asActor(db, c.alice, (tx) => tx.query("select public.record_sign_in()"))
+    const { rows } = await db.query<{ n: number }>(
+      "select count(*)::int as n from public.audit_logs where action = 'auth.signed_in' and user_id = $1",
+      [c.alice.id]
+    )
+    expect(rows[0].n).toBe(1)
+  })
+})
+
 describe("Anonymous visitors", () => {
   test("cannot read anything", async () => {
     for (const table of ["employees", "payslips", "holidays", "leave_requests", "profiles"]) {

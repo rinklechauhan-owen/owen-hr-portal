@@ -17,18 +17,35 @@ export function tableFor(kind: DocumentKind) {
  * Storage path chosen by the server: `<employee_id>/<kind>/<period>-<random>.pdf`.
  * The first folder is what the storage RLS policy compares with the employee's id.
  */
-export function storagePathFor(details: UploadDetails) {
-  const period = details.month ? `${details.year}-${String(details.month).padStart(2, "0")}` : String(details.year)
-  return `${details.employee_id}/${details.kind}/${period}-${randomUUID()}.pdf`
+function periodFor(details: UploadDetails) {
+  return details.month ? `${details.year}-${String(details.month).padStart(2, "0")}` : String(details.year)
 }
 
+/**
+ * Storage path chosen by the server: `<employee_id>/<kind>/<period>-<random>.pdf`.
+ * The first folder is what the storage RLS policy compares with the employee's id.
+ */
+export function storagePathFor(details: UploadDetails) {
+  return `${details.employee_id}/${details.kind}/${periodFor(details)}-${randomUUID()}.pdf`
+}
+
+/** True only for a path in exactly the format storagePathFor issues for these details. */
 export function isPathForDetails(path: string, details: UploadDetails) {
+  const expected = `${details.employee_id}/${details.kind}/${periodFor(details)}-`
   return (
-    path.startsWith(`${details.employee_id}/${details.kind}/`) &&
-    path.endsWith(".pdf") &&
-    !path.includes("..") &&
-    path.split("/").length === 3
+    path.startsWith(expected) &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/.test(path.slice(expected.length))
   )
+}
+
+/** Whether any saved document already points at this storage path. */
+export async function isPathInUse(supabase: Client, details: UploadDetails, path: string) {
+  const { count, error } = await supabase
+    .from(tableFor(details.kind))
+    .select("id", { count: "exact", head: true })
+    .eq("file_path", path)
+  if (error) throw error
+  return (count ?? 0) > 0
 }
 
 /** The existing document for this employee and period, if any. */

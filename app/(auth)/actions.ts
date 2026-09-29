@@ -88,6 +88,12 @@ export async function updatePassword(input: ResetPasswordInput): Promise<ActionR
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
   if (error) {
+    if (error.code === "reauthentication_needed") {
+      return {
+        ok: false,
+        error: "For your security, please log out and use “Forgot password?” to set a new password.",
+      }
+    }
     if (error.code === "same_password") {
       return { ok: false, error: "Choose a password that is different from your current one." }
     }

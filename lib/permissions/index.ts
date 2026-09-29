@@ -4,6 +4,9 @@ import { redirect } from "next/navigation"
 
 import { getSession, type Session } from "@/lib/auth/session"
 
+/** Disabled sessions are ended by a route handler, which can clear cookies. */
+export const DISABLED_SIGN_OUT = "/auth/signout?reason=disabled"
+
 // Page and action guards. They give clear redirects and messages; Row Level
 // Security still enforces the same rules in the database.
 
@@ -18,11 +21,15 @@ export function isActiveEmployee(session: Session | null): session is EmployeeSe
   return Boolean(session?.profile.is_active && session.employee?.status === "active")
 }
 
-/** For signed-in pages: sends signed-out or disabled users to the login page. */
+/**
+ * For signed-in pages: sends signed-out or disabled users to the login page.
+ * The proxy already redirects visitors with no session, so a missing session here
+ * means a login without a profile; ending it avoids a redirect loop via /login.
+ */
 export async function requireSession() {
   const session = await getSession()
-  if (!session) redirect("/login")
-  if (!session.profile.is_active) redirect("/login?error=disabled")
+  if (!session) redirect("/auth/signout")
+  if (!session.profile.is_active) redirect(DISABLED_SIGN_OUT)
   return session
 }
 
@@ -31,7 +38,7 @@ export async function requireEmployee(): Promise<EmployeeSession> {
   const session = await requireSession()
   if (isActiveEmployee(session)) return session
   if (isAdmin(session)) redirect("/admin")
-  redirect("/login?error=disabled")
+  redirect(DISABLED_SIGN_OUT)
 }
 
 export class ActionError extends Error {}

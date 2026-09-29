@@ -209,6 +209,32 @@ describe("Reviewing leave", () => {
     expect(message).toBe("You cannot review your own leave request. Ask another administrator.")
   })
 
+  test("an admin cannot change their own leave balance", async () => {
+    const adminEmployee = await db.query<{ id: string }>(
+      `insert into public.employees (employee_code, first_name, last_name, email, joining_date, profile_id)
+       values ('OM-901', 'Hema', 'Roy', 'hr@owen-media.test', '2024-01-01', $1) returning id`,
+      [c.admin.id]
+    )
+    const message = await errorMessage(db, c.admin, (tx) =>
+      tx.query("update public.leave_balances set allocated_days = 99 where employee_id = $1", [adminEmployee.rows[0].id])
+    )
+    expect(message).toBe("You cannot change your own leave balance. Ask another administrator.")
+  })
+
+  test("the database sets a new request's id and timestamps", async () => {
+    const forgedId = "00000000-0000-4000-8000-000000000001"
+    const row = await asActor(db, c.alice, async (tx) => {
+      const { rows } = await tx.query<{ id: string; created_at: string }>(
+        `insert into public.leave_requests (id, employee_id, leave_type_id, start_date, end_date, reason, created_at)
+         values ($1, $2, $3, $4, $4, 'Personal work', '2000-01-01') returning id, created_at::text`,
+        [forgedId, c.aliceId, c.casual, c.monday]
+      )
+      return rows[0]
+    })
+    expect(row.id).not.toBe(forgedId)
+    expect(row.created_at.startsWith("2000")).toBe(false)
+  })
+
   test("employees can cancel their own pending request", async () => {
     const request = await apply(c.alice, c.aliceId, c.casual, c.monday, c.monday)
     await asActor(db, c.alice, (tx) => tx.query("select public.cancel_leave_request($1)", [request.id]))

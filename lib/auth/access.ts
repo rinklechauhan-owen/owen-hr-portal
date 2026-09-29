@@ -35,7 +35,11 @@ export function safeNextPath(next: string | null | undefined): string | null {
   try {
     const url = new URL(next, "http://localhost")
     if (url.origin !== "http://localhost") return null
-    return `${url.pathname}${url.search}`
+    const path = `${url.pathname}${url.search}`
+    // Normalisation can turn "/.//evil.com" into "//evil.com", which browsers treat
+    // as another site, so check the result again.
+    if (path.startsWith("//") || path.startsWith("/\\")) return null
+    return path
   } catch {
     return null
   }

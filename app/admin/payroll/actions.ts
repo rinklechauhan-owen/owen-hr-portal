@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-import { findExistingDocument, isPathForDetails, removeStoredFile, storagePathFor, tableFor, verifyStoredPdf } from "@/lib/payroll"
+import { findExistingDocument, isPathForDetails, isPathInUse, removeStoredFile, storagePathFor, tableFor, verifyStoredPdf } from "@/lib/payroll"
 import { authorizeAdmin } from "@/lib/permissions"
 import { createClient } from "@/lib/supabase/server"
 import { fail, invalid, logServerError } from "@/lib/utils/errors"
@@ -60,7 +60,11 @@ export async function finalizeUpload(input: z.input<typeof finalizeUploadSchema>
     const parsed = finalizeUploadSchema.safeParse(input)
     if (!parsed.success) return invalid(parsed.error)
     const { details, path } = parsed.data
-    if (!isPathForDetails(path, details)) return { ok: false, error: "The upload did not match the selected details." }
+    // Only a fresh path issued by prepareUpload is accepted, so a failure below can
+    // never remove a file that belongs to another document.
+    if (!isPathForDetails(path, details) || (await isPathInUse(supabase, details, path))) {
+      return { ok: false, error: "The upload did not match the selected details." }
+    }
     uploadedPath = path
 
     const problem = await verifyStoredPdf(supabase, path)
