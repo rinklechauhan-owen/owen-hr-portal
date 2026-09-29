@@ -12,10 +12,9 @@ create schema storage;
 
 grant usage on schema public, auth, storage, extensions to anon, authenticated, service_role;
 
--- Supabase grants API roles full table privileges by default and relies on RLS.
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+-- Newer Supabase projects do NOT grant the API roles access to new tables
+-- automatically, so the stubs don't either: the migrations must grant what the app
+-- needs explicitly. (Function EXECUTE is still granted to PUBLIC by Postgres.)
 
 create table auth.users (
   id uuid primary key default gen_random_uuid(),

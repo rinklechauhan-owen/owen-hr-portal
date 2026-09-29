@@ -47,6 +47,10 @@ TanStack Query · Supabase (`@supabase/ssr`) · Vitest + PGlite for tests.
    npm run db:push
    ```
 
+   Table access is granted explicitly in the migrations (newer Supabase projects do not
+   grant it automatically). If you add a table in a future migration, grant it to
+   `authenticated` and `service_role` there as well, and enable RLS.
+
 4. **Configure Supabase Auth and create the first admin**: follow
    [docs/deployment.md](docs/deployment.md) sections 1 and 3 (disable sign-ups, set the
    redirect URL, paste the two email templates, run `scripts/create-admin.mjs`).

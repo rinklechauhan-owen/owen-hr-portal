@@ -48,36 +48,55 @@ if (wantsEmployee && !(values["first-name"] && values["last-name"] && values["jo
 
 const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
 
-const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
-  redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
-  data: { full_name: name },
-})
-if (inviteError) fail(inviteError.code === "email_exists" ? "A login with this email already exists." : inviteError.message)
-const userId = invited.user.id
+// Safe to re-run: if the login already exists (for example the invite was sent but
+// a later step failed), finish setting it up instead of inviting again.
+const { data: existing, error: lookupError } = await supabase.from("profiles").select("id").eq("email", email).maybeSingle()
+if (lookupError) fail(`Could not check for an existing login: ${lookupError.message}`)
 
-const { error: roleError } = await supabase.from("profiles").update({ role: "admin", full_name: name }).eq("id", userId)
-if (roleError) fail(`Invite sent, but the admin role could not be set: ${roleError.message}`)
-
-if (wantsEmployee) {
-  const { data: employee, error: employeeError } = await supabase
-    .from("employees")
-    .insert({
-      employee_code: values["employee-code"].toUpperCase(),
-      first_name: values["first-name"],
-      last_name: values["last-name"],
-      email,
-      joining_date: values["joining-date"],
-    })
-    .select("id")
-    .single()
-  if (employeeError) fail(`Admin created, but the employee record failed: ${employeeError.message}`)
-
-  const { error: linkError } = await supabase.rpc("service_link_employee_profile", {
-    p_employee_id: employee.id,
-    p_profile_id: userId,
-    p_actor_id: null,
+let userId = existing?.id
+let invitedNow = false
+if (!userId) {
+  const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
+    data: { full_name: name },
   })
-  if (linkError) fail(`Employee created, but linking the login failed: ${linkError.message}`)
+  if (inviteError) fail(inviteError.message)
+  userId = invited.user.id
+  invitedNow = true
 }
 
-console.log(`Done. An invite has been emailed to ${email}. They are an admin${wantsEmployee ? " and an employee" : ""}.`)
+const { error: roleError } = await supabase.from("profiles").update({ role: "admin", full_name: name }).eq("id", userId)
+if (roleError) fail(`The admin role could not be set: ${roleError.message}`)
+
+if (wantsEmployee) {
+  const { data: linked } = await supabase.from("employees").select("id").eq("profile_id", userId).maybeSingle()
+  if (linked) {
+    console.log("This login already has an employee record; leaving it unchanged.")
+  } else {
+    const { data: employee, error: employeeError } = await supabase
+      .from("employees")
+      .insert({
+        employee_code: values["employee-code"].toUpperCase(),
+        first_name: values["first-name"],
+        last_name: values["last-name"],
+        email,
+        joining_date: values["joining-date"],
+      })
+      .select("id")
+      .single()
+    if (employeeError) fail(`Admin set up, but the employee record failed: ${employeeError.message}`)
+
+    const { error: linkError } = await supabase.rpc("service_link_employee_profile", {
+      p_employee_id: employee.id,
+      p_profile_id: userId,
+      p_actor_id: null,
+    })
+    if (linkError) fail(`Employee created, but linking the login failed: ${linkError.message}`)
+  }
+}
+
+console.log(
+  invitedNow
+    ? `Done. An invite has been emailed to ${email}. They are an admin${wantsEmployee ? " and an employee" : ""}.`
+    : `Done. ${email} is now an admin${wantsEmployee ? " and an employee" : ""}. Use the invite email already sent, or "Forgot password?" on the login page if it has expired.`
+)

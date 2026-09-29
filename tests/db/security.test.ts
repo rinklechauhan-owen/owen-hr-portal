@@ -204,6 +204,18 @@ describe("Sign-in audit entries", () => {
   })
 })
 
+describe("Service role (trusted server code)", () => {
+  test("can read profiles and set an admin role, as scripts/create-admin.mjs does", async () => {
+    const userId = await asActor(db, { kind: "service" }, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>("select id from public.profiles where id = $1", [c.bob.id])
+      await tx.query("update public.profiles set role = 'admin' where id = $1", [c.bob.id])
+      await tx.query("update public.profiles set role = 'employee' where id = $1", [c.bob.id])
+      return rows[0]?.id
+    })
+    expect(userId).toBe(c.bob.id)
+  })
+})
+
 describe("Anonymous visitors", () => {
   test("cannot read anything", async () => {
     for (const table of ["employees", "payslips", "holidays", "leave_requests", "profiles"]) {
