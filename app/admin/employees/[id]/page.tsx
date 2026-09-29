@@ -1,28 +1,35 @@
-import { History } from "lucide-react"
+import { History, Upload } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import { z } from "zod"
 
 import { ActivityList, type ActivityEntry } from "@/components/admin/activity-list"
 import { EmployeeActions } from "@/components/admin/employee-actions"
 import { EmployeeLeaveTab } from "@/components/admin/employee-leave-tab"
+import { PayrollDocumentTable } from "@/components/admin/payroll-document-table"
 import { DetailList } from "@/components/shared/detail-list"
 import { EmptyState } from "@/components/shared/empty-state"
 import { LinkTabs } from "@/components/shared/link-tabs"
 import { PageHeader } from "@/components/shared/page-header"
 import { Pagination, pageRange } from "@/components/shared/pagination"
 import { EmployeeStatusBadge, StatusBadge } from "@/components/shared/status-badge"
+import { buttonVariants } from "@/components/ui/button"
 import { requireSession } from "@/lib/permissions"
 import { getSettings } from "@/lib/queries/reference"
 import { createClient } from "@/lib/supabase/server"
 import { formatDate, todayIn } from "@/lib/utils/format"
 import { flattenParams } from "@/lib/utils/params"
+import { DOCUMENT_KINDS } from "@/lib/validations/payroll"
 
 export const metadata: Metadata = { title: "Employee" }
 
 const TABS = [
   { value: "overview", label: "Overview" },
   { value: "leave", label: "Leave" },
+  { value: "payslips", label: "Payslips" },
+  { value: "ytd", label: "YTD Reports" },
+  { value: "pf-ytd", label: "PF Reports" },
   { value: "activity", label: "Activity" },
 ] as const
 type Tab = (typeof TABS)[number]["value"]
@@ -119,6 +126,25 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
           page={page}
           basePath={base}
         />
+      )}
+
+      {(tab === "payslips" || tab === "ytd" || tab === "pf-ytd") && (
+        <>
+          <div className="mb-4 flex justify-end">
+            <Link href={`/admin/payroll?employee=${id}&kind=${tab}`} className={buttonVariants()}>
+              <Upload aria-hidden />
+              Upload {DOCUMENT_KINDS[tab].label.toLowerCase()}
+            </Link>
+          </div>
+          <PayrollDocumentTable
+            kind={tab}
+            employeeId={id}
+            page={page}
+            basePath={base}
+            params={{ tab }}
+            showEmployee={false}
+          />
+        </>
       )}
 
       {tab === "activity" && <EmployeeActivity employeeId={id} page={page} basePath={base} />}
