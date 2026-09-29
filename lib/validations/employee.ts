@@ -34,11 +34,12 @@ export type EmployeeInput = z.input<typeof employeeSchema>
 
 export const phoneSchema = z.object({ phone: phoneField })
 
+/** List filters from the URL. Status defaults to active; "all" shows everyone. */
 export const employeeFiltersSchema = z.object({
   q: z.string().trim().max(100).catch(""),
-  department: z.union([z.uuid(), z.literal("")]).catch(""),
-  status: z.enum(["active", "inactive", ""]).catch("active"),
-  page: z.coerce.number().int().min(1).catch(1),
+  department: z.uuid().catch(""),
+  status: z.enum(["active", "inactive", "all"]).catch("active"),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
 })
 
 /** Turns empty optional form fields into nulls for the database. */
